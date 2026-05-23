@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>レトロ・ベースボール（ファミスタ風）</title>
+    <style>
+        body {
+            background-color: #222;
+            color: #fff;
+            font-family: 'Courier New', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            user-select: none;
+        }
+        h1 { margin: 5px; color: #f1c40f; font-size: 24px; text-shadow: 2px 2px #000; }
+        #game-container { display: flex; gap: 20px; background: #333; padding: 15px; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        canvas { border: 4px solid #fff; background-color: #27ae60; }
+        #scoreboard { display: flex; flex-direction: column; gap: 15px; min-width: 140px; }
+        .box { background: #111; padding: 10px; border-radius: 5px; border: 2px solid #555; text-align: center; }
+        .count-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #444; margin: 0 2px; }
+        .yellow { background: #f1c40f; }
+        .green { background: #2ecc71; }
+        .red { background: #e74c3c; }
+        .status-text { font-size: 24px; font-weight: bold; color: #e74c3c; text-align: center; margin-top: 10px; min-height: 30px; }
+    </style>
+</head>
+<body>
+
+    <h1>RETRO FAMISTA STADIUM</h1>
+    
+    <div id="game-container">
+        <!-- 野球盤画面 -->
+        <canvas id="gameCanvas" width="320" height="400"></canvas>
+        
+        <!-- スコア・カウント表示 -->
+        <div id="scoreboard">
+            <div class="box">
+                <div>SCORE</div>
+                <div id="score" style="font-size: 20px; color: #f39c12; font-weight: bold;">0</div>
+            </div>
+            <div class="box" style="text-align: left;">
+                <div>S: <span id="s-dots"></span></div>
+                <div>B: <span id="b-dots"></span></div>
+                <div>O: <span id="o-dots"></span></div>
+            </div>
+            <div id="status" class="status-text"></div>
+            <div style="font-size: 11px; color: #ccc; line-height: 1.4;">
+                【操作方法】<br>
+                ・ピッチャー移動: ← →<br>
+                ・投球: Space<br>
+                ・変化球: 投球中に ← →<br>
+                ・バッター移動: ↑ ↓<br>
+                ・スイング: Space
+            </div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const statusDiv = document.getElementById('status');
+
+// ゲーム状態
+let strikes = 0, balls = 0, outs = 0, score = 0;
+let gameState = "pitching"; // pitching, ball-flying, bat-swimming, hit-flying, result
+
+// キャラクター＆ボール位置
+let pitcher = { x: 160, y: 100, width: 14, height: 20, dir: 1 };
+let batter = { x: 160, y: 340, width: 14, height: 22, targetY: 340 };
+let ball = { x: 160, y: 110, vx: 0, vy: 0, radius: 4, active: false };
+let isSwinging = false;
+let swingTimer = 0;
+
+// キー入力状態
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.code] = true; if(e.code === 'Space') handleSpace(); });
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// 🔊 8bit風ピコピコ効果音
+let audioCtx = null;
+function playTone(freq, duration, type='square') {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+// カウント表示更新
+function updateCounts() {
+    document.getElementById('score').innerText = score;
+    document.getElementById('s-dots').innerHTML = '<span class="count-dot yellow"></span>'.repeat(strikes) + '<span class="count-dot"></span>'.repeat(2-strikes);
+    document.getElementById('b-dots').innerHTML = '<span class="count-dot green"></span>'.repeat(balls) + '<span class="count-dot"></span>'.repeat(3-balls);
+    document.getElementById('o-dots').innerHTML = '<span class="count-dot red"></span>'.repeat(outs) + '<span class="count-dot"></span>'.repeat(2-outs);
+}
+
+function handleSpace() {
+    if (gameState === "pitching") {
+        // 投球
+        gameState = "ball-flying";
+        ball.x = pitcher.x;
+        ball.y = 110;
+        ball.vx = 0;
+        ball.vy = 4; // 球速
+        playTone(440, 0.1, 'triangle');
+        statusDiv.innerText = "";
+    } else if (gameState === "ball-flying" && !isSwinging) {
+        // スイング
+        isSwinging = true;
+        swingTimer = 8; // スイングの持続フレーム
+        playTone(600, 0.05, 'noise');
+    } else if (gameState === "result") {
+        // 次の球へリセット
+        resetPitch();
+    }
+}
+
+function resetPitch() {
+    gameState = "pitching";
+    ball.active = false;
+    isSwinging = false;
+    statusDiv.innerText = "";
+    pitcher.x = 160;
+}
+
+function triggerResult(text) {
+    gameState = "result";
+    statusDiv.innerText = text;
+    if (text === "STRIKE") { playTone(300, 0.15); strikes++; }
+    if (text === "BALL") { playTone(500, 0.15); balls++; }
+    if (text === "HIT!!") { playTone(880, 0.3, 'sine'); score++; strikes = 0; balls = 0; }
+    if (text === "OUT!") { playTone(200, 0.4); outs++; strikes = 0; balls = 0; }
+
+    if (strikes >= 3) { outs++; strikes = 0; balls = 0; statusDiv.innerText = "STRIKE OUT!"; playTone(180, 0.5); }
+    if (balls >= 4) { score++; strikes = 0; balls = 0; statusDiv.innerText = "FOUR BALL!"; playTone(600, 0.3); }
+    if (outs >= 3) { outs = 0; score = 0; statusDiv.innerText = "GAME OVER"; }
+    updateCounts();
+}
+
+// メインループ
+function update() {
+    // 1. 位置移動の処理
+    if (gameState === "pitching") {
+        if (keys['ArrowLeft'] && pitcher.x > 110) pitcher.x -= 2;
+        if (keys['ArrowRight'] && pitcher.x < 210) pitcher.x += 2;
+    }
+    // バッターの移動
+    if (keys['ArrowUp'] && batter.targetY > 320) batter.targetY -= 2;
+    if (keys['ArrowDown'] && batter.targetY < 360) batter.targetY += 2;
+
+    // 2. ボード上のボールの物理処理
+    if (gameState === "ball-flying") {
+        // 投球中の変化球操作
+        if (keys['ArrowLeft']) ball.x -= 0.7;
+        if (keys['ArrowRight']) ball.x += 0.7;
+        
+        ball.y += ball.vy;
+
+        // バットとの当たり判定
+        if (isSwinging && Math.abs(ball.y - batter.targetY) < 12 && Math.abs(ball.x - batter.x) < 20) {
+            // ナイスバッティング！反転して打ち返す
+            gameState = "hit-flying";
+            ball.vy = -Math.floor(Math.random() * 5 + 4);
+            ball.vx = (ball.x - batter.x) * 0.4; // 当たった位置で角度が変わる
+            playTone(900, 0.15, 'square');
+        }
+        // パスボール（ストライク・ボール判定）
+        else if (ball.y > 370) {
+            if (ball.x > 145 && ball.x < 175) {
+                triggerResult("STRIKE");
+            } else {
+                triggerResult("BALL");
+            }
+        }
+    }
+
+    if (gameState === "hit-flying") {
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        // 画面外（奥）に飛んだらヒットかアウトかランダム判定
+        if (ball.y < 40 || ball.x < 20 || ball.x > 300) {
+            if (Math.random() > 0.4) {
+                triggerResult("HIT!!");
+            } else {
+                triggerResult("OUT!");
+            }
+        }
+    }
+
+    if (isSwinging) {
+        swingTimer--;
+        if (swingTimer <= 0) isSwinging = false;
+    }
+
+    // 3. 描画
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 野球場のライン描画
+    ctx.fillStyle = "#e67e22"; // 内野の土
+    ctx.beginPath(); ctx.moveTo(160, 200); ctx.lineTo(60, 300); ctx.lineTo(160, 400); ctx.lineTo(260, 300); ctx.fill();
+    ctx.fillStyle = "#27ae60"; // 芝生
+    ctx.beginPath(); ctx.moveTo(160, 220); ctx.lineTo(85, 295); ctx.lineTo(160, 370); ctx.lineTo(235, 295); ctx.fill();
+    
+    // ホームベース
+    ctx.fillStyle = "#fff"; ctx.fillRect(154, 355, 12, 12);
+
+    // ピッチャープレート
+    ctx.fillStyle = "#fff"; ctx.fillRect(145, 125, 30, 4);
+
+    // ピッチャー描画（簡易ドット絵風）
+    ctx.fillStyle = "#3498db"; // ユニフォーム
+    ctx.fillRect(pitcher.x - 7, pitcher.y - 10, pitcher.width, pitcher.height);
+    ctx.fillStyle = "#f39c12"; // 帽子・肌
+    ctx.fillRect(pitcher.x - 5, pitcher.y - 15, 10, 5);
+
+    // バッター描画
+    ctx.fillStyle = "#e74c3c"; // ユニフォーム
+    ctx.fillRect(batter.x - 7, batter.targetY - 11, batter.width, batter.height);
+    ctx.fillStyle = "#f39c12"; // ヘルメット
+    ctx.fillRect(batter.x - 5, batter.targetY - 17, 10, 6);
+    
+    // バット描画
+    if (isSwinging) {
+        ctx.fillStyle = "#f39c12";
+        ctx.fillRect(batter.x - 25, batter.targetY - 4, 20, 5); // スイング中
+    } else {
+        ctx.fillStyle = "#d35400";
+        ctx.fillRect(batter.x + 5, batter.targetY - 15, 5, 15); // 構え
+    }
+
+    // ボール描画
+    if (gameState === "ball-flying" || gameState === "hit-flying") {
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    requestAnimationFrame(update);
+}
+
+// 始動
+updateCounts();
+update();
+</script>
+</body>
+</html>
