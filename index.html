@@ -2,14 +2,13 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <!-- スマホでの拡大を防ぎ、等倍で表示するための設定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>スマホ対応・テトリス</title>
+    <title>みやさこ先輩とおいらしのテトリス</title>
     <style>
         body {
-            background-color: #202020;
+            background-color: #1a1a1a;
             color: #fff;
-            font-family: sans-serif;
+            font-family: 'Courier New', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -17,62 +16,75 @@
             min-height: 100vh;
             margin: 0;
             padding-top: 10px;
-            /* スマホで引っ張って更新されるのを防ぐ */
-            overscroll-behavior: none; 
+            overscroll-behavior: none;
         }
-        h1 { margin: 5px 0; font-size: 24px; }
-        #game-container { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; }
-        canvas { border: 2px solid #fff; background-color: #111; max-width: 100%; }
-        #sidebar { display: flex; flex-direction: column; gap: 10px; }
-        .info-box {
-            background: #333;
-            padding: 10px;
-            border-radius: 5px;
-            min-width: 80px;
-            text-align: center;
-            font-size: 16px;
-        }
-        #score { font-size: 20px; font-weight: bold; margin-top: 5px; }
-        #game-over { color: #ff4d4d; font-weight: bold; display: none; }
+        h1 { margin: 5px 0; font-size: 22px; color: #f39c12; text-shadow: 2px 2px #000; }
         
-        /* スマホ用コントローラーのスタイル */
-        #controller {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+        /* セリフ表示（歌詞エリア） */
+        #lyrics-box {
             width: 90%;
             max-width: 320px;
-            margin-top: auto;
-            margin-bottom: 20px;
+            background: #333;
+            border: 2px dashed #f39c12;
+            padding: 8px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            min-height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #58d68d;
+            text-align: center;
+            font-weight: bold;
         }
-        .btn-row { display: flex; justify-content: center; gap: 10px; }
+
+        #game-container { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; }
+        canvas { border: 4px solid #fff; background-color: #000; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        
+        #sidebar { display: flex; flex-direction: column; gap: 10px; }
+        .info-box {
+            background: #222;
+            border: 2px solid #555;
+            padding: 8px;
+            border-radius: 5px;
+            min-width: 70px;
+            text-align: center;
+            font-size: 14px;
+        }
+        #score { font-size: 18px; font-weight: bold; color: #f1c40f; }
+        #game-over { color: #e74c3c; font-weight: bold; display: none; font-size: 14px; animation: blink 0.5s infinite; }
+        
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        /* コントローラー */
+        #controller { display: flex; flex-direction: column; gap: 8px; width: 90%; max-width: 320px; margin-top: auto; margin-bottom: 15px; }
+        .btn-row { display: flex; justify-content: center; gap: 8px; }
         .btn {
             background-color: #444;
             color: white;
             border: none;
-            border-radius: 10px;
-            font-size: 20px;
+            border-radius: 8px;
+            font-size: 18px;
             font-weight: bold;
-            padding: 15px 0;
+            padding: 12px 0;
             flex: 1;
             text-align: center;
             box-shadow: 0 4px #222;
-            /* タッチ時のデフォルトの青いハイライトを消す */
-            -webkit-tap-highlight-color: transparent; 
+            -webkit-tap-highlight-color: transparent;
             user-select: none;
         }
-        .btn:active {
-            background-color: #666;
-            transform: translateY(2px);
-            box-shadow: 0 2px #222;
-        }
-        .btn-hard { background-color: #d68910; }
-        .btn-hard:active { background-color: #f39c12; }
+        .btn:active { background-color: #666; transform: translateY(2px); box-shadow: 0 2px #222; }
+        .btn-hard { background-color: #e67e22; }
     </style>
 </head>
 <body>
 
-    <h1>TETRIS</h1>
+    <h1>みやさこ先輩「そこじゃねえ！」テトリス</h1>
+    
+    <!-- 歌詞とセリフのリアルタイム表示盤 -->
+    <div id="lyrics-box" id="lyrics">💡 画面をタッチするかキーを押すと、しらいし達の声（音）が始まります！</div>
+
     <div id="game-container">
         <canvas id="tetris" width="200" height="400"></canvas>
         <div id="sidebar">
@@ -84,7 +96,6 @@
         </div>
     </div>
 
-    <!-- 画面上のコントローラー -->
     <div id="controller">
         <div class="btn-row">
             <button class="btn" id="btn-rot">回転 (↑)</button>
@@ -102,37 +113,96 @@ const canvas = document.getElementById('tetris');
 const context = canvas.getContext('2d');
 const scoreElement = document.getElementById('score');
 const gameOverElement = document.getElementById('game-over');
+const lyricsBox = document.getElementById('lyrics-box');
 
 const ROW = 20;
 const COL = 10;
-const SQ = 20; // スマホサイズに合わせてマスを少し小さめに
+const SQ = 20;
 context.scale(SQ, SQ);
 
-const COLORS = [
-    null, '#00f0f0', '#0000f0', '#f0a000', '#f0f000', '#00f000', '#a000f0', '#f00000'
-];
-
+// レトロな8ビットカラー
+const COLORS = [null, '#00f0f0', '#0000f0', '#f0a000', '#f0f000', '#00f000', '#a000f0', '#f00000'];
 const SHAPES = [
     [],
-    [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
-    [[2,0,0],[2,2,2],[0,0,0]],
-    [[0,0,3],[3,3,3],[0,0,0]],
-    [[4,4],[4,4]],
-    [[0,5,5],[5,5,0],[0,0,0]],
-    [[0,6,0],[6,6,6],[0,0,0]],
-    [[7,7,0],[0,7,7],[0,0,0]]
+    [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
+    [[2,0,0],[2,2,2],[0,0,0]],                 // J
+    [[0,0,3],[3,3,3],[0,0,0]],                 // L
+    [[4,4],[4,4]],                             // O
+    [[0,5,5],[5,5,0],[0,0,0]],                 // S
+    [[0,6,0],[6,6,6],[0,0,0]],                 // T
+    [[7,7,0],[0,7,7],[0,0,0]]                  // Z
 ];
 
-let board = [];
-for (let r = 0; r < ROW; r++) {
-    board[r] = [];
-    for (let c = 0; c < COL; c++) {
-        board[r][c] = 0;
+let board = Array.from({length: ROW}, () => Array(COL).fill(0));
+const player = { pos: {x: 0, y: 0}, matrix: null, score: 0 };
+
+// --- 🔊 Web Audio API による8bitピコピコサウンドシステム ---
+let audioCtx = null;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 }
 
-const player = { pos: {x: 0, y: 0}, matrix: null, score: 0 };
+// ピコピコ音を生成する関数
+function play8BitTone(freq, duration, type = 'square') {
+    if (!audioCtx) return;
+    try {
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = type; // square(短形波) = ファミコンのピコピコ音
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+}
 
+// 面白いセリフをランダム表示＆専用音
+function saySomething(type) {
+    initAudio();
+    const shiraishiSay = [
+        "しらいし「みやさこ先輩、次どうします！？」",
+        "しらいし「ああっ！積み上がってきました！」",
+        "しらいし「先輩、長い棒（Iブロック）を頼みます！」",
+        "しらいし「そこじゃない気がします先輩！」"
+    ];
+    const miyasakoSay = [
+        "みやさこ先輩「おい、しらいし！そこじゃねえ！！」",
+        "みやさこ先輩「回転や！ボタン連打せんかい！」",
+        "みやさこ先輩「これが俺のパワープレイや！」",
+        "みやさこ先輩「安心せえ、俺が全部消したる！」"
+    ];
+
+    if (type === 'move') {
+        // 移動時の軽いピコ音
+        play8BitTone(600, 0.05, 'square');
+    } else if (type === 'rotate') {
+        // 回転時のちょっと高い音
+        play8BitTone(880, 0.08, 'triangle');
+        if (Math.random() < 0.3) lyricsBox.innerText = miyasakoSay[Math.floor(Math.random() * miyasakoSay.length)];
+    } else if (type === 'clear') {
+        // ライン消去時のファンファーレ風音
+        play8BitTone(523.25, 0.1, 'square');
+        setTimeout(() => play8BitTone(659.25, 0.1, 'square'), 100);
+        setTimeout(() => play8BitTone(783.99, 0.2, 'square'), 200);
+        lyricsBox.innerText = "みやさこ先輩「見たか！しらいし！これが実力や！」";
+    } else if (type === 'gameover') {
+        // ゲームオーバー時の気の抜けた音
+        play8BitTone(392, 0.2, 'square');
+        setTimeout(() => play8BitTone(349.23, 0.2, 'square'), 200);
+        setTimeout(() => play8BitTone(293.66, 0.4, 'square'), 400);
+        lyricsBox.innerText = "しらいし「あーあ…先輩のせいでゲームオーバーです…」";
+    } else if (type === 'spawn') {
+        if (Math.random() < 0.25) lyricsBox.innerText = shiraishiSay[Math.floor(Math.random() * shiraishiSay.length)];
+    }
+}
+
+// --- テトリスロジック ---
 function playerReset() {
     const id = Math.floor(Math.random() * 7) + 1;
     player.matrix = SHAPES[id];
@@ -142,6 +212,9 @@ function playerReset() {
     if (collide(board, player)) {
         gameOverElement.style.display = 'block';
         gameRunning = false;
+        saySomething('gameover');
+    } else {
+        saySomething('spawn');
     }
 }
 
@@ -149,9 +222,7 @@ function collide(board, player) {
     const [m, o] = [player.matrix, player.pos];
     for (let r = 0; r < m.length; ++r) {
         for (let c = 0; c < m[r].length; ++c) {
-            if (m[r][c] !== 0 && (board[r + o.y] && board[r + o.y][c + o.x]) !== 0) {
-                return true;
-            }
+            if (m[r][c] !== 0 && (board[r + o.y] && board[r + o.y][c + o.x]) !== 0) return true;
         }
     }
     return false;
@@ -163,8 +234,8 @@ function drawMatrix(matrix, offset) {
             if (value !== 0) {
                 context.fillStyle = COLORS[value];
                 context.fillRect(c + offset.x, r + offset.y, 1, 1);
-                context.strokeStyle = '#202020';
-                context.lineWidth = 0.05;
+                context.strokeStyle = '#1a1a1a';
+                context.lineWidth = 0.08;
                 context.strokeRect(c + offset.x, r + offset.y, 1, 1);
             }
         });
@@ -172,7 +243,7 @@ function drawMatrix(matrix, offset) {
 }
 
 function draw() {
-    context.fillStyle = '#111';
+    context.fillStyle = '#000';
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawMatrix(board, {x: 0, y: 0});
     drawMatrix(player.matrix, player.pos);
@@ -181,29 +252,36 @@ function draw() {
 function merge(board, player) {
     player.matrix.forEach((row, r) => {
         row.forEach((value, c) => {
-            if (value !== 0) { board[r + player.pos.y][c + player.pos.x] = value; }
+            if (value !== 0) board[r + player.pos.y][c + player.pos.x] = value;
         });
     });
 }
 
 function arenaSweep() {
-    let rowCount = 1;
+    let rowCount = 0;
     outer: for (let r = board.length - 1; r > 0; --r) {
         for (let c = 0; c < board[r].length; ++c) {
-            if (board[r][c] === 0) { continue outer; }
+            if (board[r][c] === 0) continue outer;
         }
         const row = board.splice(r, 1)[0].fill(0);
         board.unshift(row);
         ++r;
-        player.score += rowCount * 10;
-        rowCount *= 2;
+        rowCount++;
     }
-    scoreElement.innerText = player.score;
+    if (rowCount > 0) {
+        player.score += rowCount * 10;
+        scoreElement.innerText = player.score;
+        saySomething('clear');
+    }
 }
 
 function playerMove(dir) {
     player.pos.x += dir;
-    if (collide(board, player)) { player.pos.x -= dir; }
+    if (collide(board, player)) {
+        player.pos.x -= dir;
+    } else {
+        saySomething('move');
+    }
 }
 
 function playerDrop() {
@@ -213,14 +291,21 @@ function playerDrop() {
         merge(board, player);
         playerReset();
         arenaSweep();
+    } else {
+        play8BitTone(150, 0.02, 'sawtooth'); // トントンという落下微音
     }
     dropCounter = 0;
 }
 
 function playerHardDrop() {
-    while (!collide(board, player)) { player.pos.y++; }
+    let count = 0;
+    while (!collide(board, player)) {
+        player.pos.y++;
+        count++;
+    }
     player.pos.y--;
     merge(board, player);
+    if(count > 0) play8BitTone(300, 0.15, 'sawtooth'); // ドンッという着地音
     playerReset();
     arenaSweep();
     dropCounter = 0;
@@ -239,6 +324,7 @@ function playerRotate() {
             return;
         }
     }
+    saySomething('rotate');
 }
 
 function rotate(matrix) {
@@ -260,12 +346,12 @@ function update(time = 0) {
     const deltaTime = time - lastTime;
     lastTime = time;
     dropCounter += deltaTime;
-    if (dropCounter > dropInterval) { playerDrop(); }
+    if (dropCounter > dropInterval) playerDrop();
     draw();
     requestAnimationFrame(update);
 }
 
-// PC用のキーボード操作
+// 入力イベント
 document.addEventListener('keydown', event => {
     if (!gameRunning) return;
     if (event.keyCode === 37) playerMove(-1);
@@ -275,12 +361,10 @@ document.addEventListener('keydown', event => {
     else if (event.keyCode === 32) playerHardDrop();
 });
 
-// スマホ用のボタン操作イベント設定
 function addButtonEvent(id, action) {
     const btn = document.getElementById(id);
-    // touchstart（スマホ用）と mousedown（PCマウス確認用）の両方に対応
     const trigger = (e) => {
-        e.preventDefault(); // 連打した時のブラウザズームなどを防止
+        e.preventDefault();
         if (gameRunning) { action(); draw(); }
     };
     btn.addEventListener('touchstart', trigger, { passive: false });
@@ -297,4 +381,4 @@ playerReset();
 update();
 </script>
 </body>
-</html>	
+</html>
